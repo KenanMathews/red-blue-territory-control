@@ -317,32 +317,47 @@ function updateTimerDisplay() {
 function handleServerMessage(event) {
   try {
     const data = JSON.parse(event.data);
-
     switch (data.type) {
-      case "timer_update":
-        // Handle timer-only updates
-        if (typeof data.timer === "number") {
-          serverTimer = data.timer;
-          updateTimerDisplay();
+      case "game_reset":
+        // Handle game reset
+        isGameOver = false;
+        gameOverOverlay.classList.remove("visible");
+
+        // Reset stats display
+        document.getElementById("finalRounds").textContent = "0";
+        document.getElementById("finalPoints").textContent = "0";
+        document.getElementById("finalEfficiency").textContent = "0";
+
+        // Update pattern info if you have UI elements for it
+        if (data.pattern_info) {
+          updatePatternInfo(data.pattern_info);
         }
         break;
 
-      case "grid_update":
-        if (Array.isArray(data.grid)) {
-          updateGrid(data.grid);
-          updateGameInfo(data);
-
-          // Check for game over
-          if (data.game_over && data.final_stats) {
-            handleGameOver(data.final_stats);
-          }
-
+        case "timer_update":
+          // Handle timer-only updates
           if (typeof data.timer === "number") {
             serverTimer = data.timer;
             updateTimerDisplay();
           }
-        }
-        break;
+          break;
+  
+        case "grid_update":
+          if (Array.isArray(data.grid)) {
+            updateGrid(data.grid);
+            updateGameInfo(data);
+  
+            // Check for game over
+            if (data.game_over && data.final_stats) {
+              handleGameOver(data.final_stats);
+            }
+  
+            if (typeof data.timer === "number") {
+              serverTimer = data.timer;
+              updateTimerDisplay();
+            }
+          }
+          break;
 
       default:
         console.warn("Unknown message type:", data.type);
@@ -350,6 +365,22 @@ function handleServerMessage(event) {
   } catch (error) {
     console.error("Error processing message:", error);
     console.error("Raw message:", event.data);
+  }
+}
+
+function updatePatternInfo(patternInfo) {
+  const patternNameElement = document.getElementById("patternName");
+  const patternDescElement = document.getElementById("patternDescription");
+  const difficultyElement = document.getElementById("difficultyLevel");
+
+  if (patternNameElement) {
+    patternNameElement.textContent = patternInfo.name;
+  }
+  if (patternDescElement) {
+    patternDescElement.textContent = patternInfo.description;
+  }
+  if (difficultyElement) {
+    difficultyElement.textContent = `Difficulty: ${patternInfo.difficulty}/5`;
   }
 }
 

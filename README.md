@@ -1,18 +1,28 @@
-# Red vs Blue Game of Life
+# Red vs Blue Territory Control Game
 
-A multiplayer web-based variant of Conway's Game of Life where players compete to eliminate red obstacles using blue cells that follow Game of Life rules.
+A multiplayer web-based tactical game where players control blue units to eliminate red obstacles through strategic placement and coordinated movements.
 
 ## Features
 
 - Real-time multiplayer gameplay using WebSocket connections
 - User authentication with JWT tokens
-- Interactive grid-based gameplay
-- Conway's Game of Life rules for blue cells
-- Strategic placement mechanics
+- Interactive grid-based tactical gameplay
+- Strategic movement system for blue units
+- Strength-based elimination mechanics
 - Real-time game statistics and scoring
 - Territory control visualization
 - Cluster analysis for both teams
 - Victory conditions and end-game statistics
+- Multiple difficulty levels and patterns
+
+## Game Rules
+
+- Red squares are static obstacles that players need to eliminate
+- Players can place blue squares in empty cells
+- Blue squares will move tactically towards nearby red targets
+- Blue units can eliminate red obstacles when sufficient blue strength is nearby
+- Game updates occur every 5 seconds
+- Victory is achieved when all red obstacles are eliminated
 
 ## Technologies Used
 
@@ -72,17 +82,30 @@ uvicorn main:app --reload
 http://localhost:8000
 ```
 
-## Game Rules
+## Game Mechanics
 
-- Red squares are static obstacles that players need to eliminate
-- Players can place blue squares in empty cells
-- Blue squares follow Conway's Game of Life rules:
-  - Survival: 2-3 neighbors
-  - Birth: Exactly 3 neighbors
-  - Death: <2 or >3 neighbors
-- Blue squares can eliminate red obstacles when sufficient blue cells are nearby
-- Game updates occur every 5 seconds
-- Victory is achieved when all red obstacles are eliminated
+### Blue Unit Behavior
+- Blue units actively seek out the nearest red targets
+- Multiple blue units can combine their strength
+- When blue strength reaches a threshold, nearby red obstacles are eliminated
+- Units move tactically to maintain formation and effectiveness
+
+### Scoring System
+- Track territory control percentage
+- Count number of clusters for both red and blue
+- Monitor activity levels and placement efficiency
+- Calculate final victory ranking based on:
+  - Point efficiency
+  - Speed rating
+  - Click efficiency
+
+### Victory Conditions
+- Eliminate all red obstacles
+- Final score based on:
+  - Total rounds taken
+  - Number of points placed
+  - Efficiency ratio
+- Rankings from "Aspiring Strategist" to "Master Tactician"
 
 ## Architecture
 
@@ -90,16 +113,28 @@ http://localhost:8000
 
 - `main.py`: FastAPI application entry point and route definitions
 - `game_manager.py`: WebSocket and game state management
-- `game_logic.py`: Core game mechanics and rules
+- `game_logic.py`: Core game mechanics and tactical rules
 - `auth.py`: Authentication and user management
 - `models.py`: Database models
 - `schemas.py`: Pydantic models for request/response validation
+- `patterns.py`: Game pattern definitions and management
 
 ### Frontend Components
 
 - `static/js/game.js`: Client-side game logic and WebSocket handling
 - `static/css/styles.css`: Game styling and animations
 - `templates/index.html`: Main game interface
+
+## Environment Configuration
+
+Create a .env file in the root directory with the following variables:
+```bash
+# Required - Secret key for JWT token generation
+SECRET_KEY=your_secure_secret_key_here
+
+# Required - Comma-separated list of allowed origins for CORS
+ALLOWED_ORIGINS=https://your-domain.onrender.com,http://localhost:8000
+```
 
 ## Security Features
 

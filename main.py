@@ -153,15 +153,6 @@ async def websocket_endpoint(websocket: WebSocket):
     except Exception as e:
         await game_manager.handle_disconnect(websocket)
 
-# Add this at the top of main.py
-import logging
-
-# Configure logging
-logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s - %(levelname)s - %(message)s'
-)
-
 async def update_game_loop():
     while True:
         try:
@@ -171,20 +162,45 @@ async def update_game_loop():
                 if i > 0:  # Only sleep if not at 0
                     await asyncio.sleep(1)
             
-            # When timer hits 0, update game state with timeout
+            # When timer hits 0, update game state with extended timeout for game over
             try:
-                async with asyncio.timeout(2.0):  # Use 2 second timeout
-                    await game_manager.update_game()
-            except TimeoutError:
-                logging.error("Game state update timed out")
+                if game_manager.game_state.game_over:
+                    # Use longer timeout for reset operations
+                    async with asyncio.timeout(5.0):
+                        await game_manager.reset_game()
+                else:
+                    # Use standard timeout for regular updates
+                    async with asyncio.timeout(2.0):
+                        await game_manager.update_game()
+                        
+                        # Check if game just ended
+                        if game_manager.game_state.game_over:
+                            # Broadcast final state
+                            await game_manager.broadcast_state()
+                            # Wait for players to see final state
+                            await asyncio.sleep(5)
+                            # Reset with longer timeout
+                            async with asyncio.timeout(5.0):
+                                await game_manager.reset_game()
+                        
+            except TimeoutError as e:
+                logging.error(f"Operation timed out: {str(e)}")
+                # If timeout occurred during reset, try to recover
+                if game_manager.game_state.game_over:
+                    try:
+                        # Force reset without broadcast
+                        async with asyncio.timeout(5.0):
+                            await game_manager.force_reset()
+                    except Exception as reset_error:
+                        logging.error(f"Failed to force reset: {reset_error}")
             except Exception as e:
-                logging.error(f"Error updating game state: {e}")            
+                logging.error(f"Error in game update: {e}")
+                
         except asyncio.CancelledError:
             logging.info("Game loop cancelled")
             break
         except Exception as e:
             logging.error(f"Unexpected error in game loop: {e}")
-            # Add a small delay before retrying
             await asyncio.sleep(0.5)
 
 @app.get("/grid")

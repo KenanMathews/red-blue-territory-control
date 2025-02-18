@@ -5,6 +5,7 @@ import asyncio
 import logging
 from starlette.websockets import WebSocketState
 import logging
+from pattern_manager import PatternManager
 
 # Configure logging
 logging.basicConfig(
@@ -20,11 +21,80 @@ class GameManager:
         self.timer = 5
         self.timer_lock = asyncio.Lock()
         self.state_lock = asyncio.Lock()
+        self.pattern_manager = PatternManager()
+
+        pattern = self.pattern_manager.get_random_pattern(min_difficulty=1, max_difficulty=5)
+        self.game_state.initialize_obstacles(pattern.rle)
+
+        self.current_pattern = pattern
+
+    async def reset_game(self):
+        """Reset the game with a new random pattern and broadcast the reset"""
+        try:
+            # First acquire state lock
+            async with self.state_lock:
+                await self._perform_reset()
+                # Broadcast reset in separate try block to ensure game state is reset even if broadcast fails
+                try:
+                    await self._broadcast_reset()
+                except Exception as broadcast_error:
+                    logging.error(f"Error broadcasting reset: {broadcast_error}")
+                    # Continue even if broadcast fails - game state is still reset
+                    
+        except Exception as e:
+            logging.error(f"Error in reset_game: {e}")
+            raise
+
+    async def force_reset(self):
+        """Emergency reset without broadcasting - used for recovery"""
+        async with self.state_lock:
+            await self._perform_reset()
+            logging.info("Forced game reset completed")
+
+    async def _perform_reset(self):
+        """Internal method to perform the actual reset operations"""
+        # Create new game state
+        self.game_state = GameState()
         
-        default_pattern = (
-            "bo$2bo$3o5$10b2o$10b2o5$20bo$18b3o$17bo$17b2o5$30bo$28b3o$27bo$27b2o5$40bo$38b3o$37bo$37b2o!"
-        )
-        self.game_state.initialize_obstacles(default_pattern)
+        # Get new random pattern
+        pattern = self.pattern_manager.get_random_pattern(min_difficulty=1, max_difficulty=5)
+        self.game_state.initialize_obstacles(pattern.rle)
+        self.current_pattern = pattern
+        
+        # Reset timer
+        async with self.timer_lock:
+            self.timer = 5
+
+    async def _broadcast_reset(self):
+        """Internal method to handle reset broadcasting"""
+        # Prepare reset message
+        reset_message = {
+            "type": "game_reset",
+            "pattern_info": {
+                "name": self.current_pattern.name,
+                "description": self.current_pattern.description,
+                "difficulty": self.current_pattern.difficulty
+            }
+        }
+        
+        # Broadcast messages with individual timeouts
+        broadcast_timeout = 2.0  # 2 second timeout for each broadcast
+        
+        try:
+            # Send reset notification
+            async with asyncio.timeout(broadcast_timeout):
+                await self.broadcast_message(reset_message)
+            
+            # Short delay to ensure clients process reset
+            await asyncio.sleep(0.1)
+            
+            async with asyncio.timeout(broadcast_timeout):
+                await self.broadcast_state()
+                
+        except TimeoutError as e:
+            logging.error(f"Broadcast timeout during reset: {e}")
+        except Exception as e:
+            logging.error(f"Error broadcasting reset: {e}")
 
     async def connect(self, websocket: WebSocket):
         """Handle new WebSocket connection"""
