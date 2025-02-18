@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Red vs Blue Game of Life</title>
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', path='css/styles.css') }}"
+    />
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', path='css/game-over.css') }}"
+    />
+  </head>
+  <body>
+    <div class="container">
+      <div id="authContainer" class="auth-container">
+        <div id="loginSection">
+          <h2 class="title">Login</h2>
+          <form id="loginForm">
+            <div class="form-group">
+              <label for="username">Username:</label>
+              <input type="text" id="username" name="username" required />
+            </div>
+            <div class="form-group">
+              <label for="password">Password:</label>
+              <input type="password" id="password" name="password" required />
+            </div>
+            <button type="submit" class="btn">Login</button>
+            <div id="loginError" class="error-message hidden"></div>
+          </form>
+          <p class="mt-4">
+            Don't have an account?
+            <a href="#" id="showRegister" class="link">Register</a>
+          </p>
+        </div>
+
+        <div id="registerSection" class="hidden">
+          <h2 class="title">Register</h2>
+          <form id="registerForm">
+            <div class="form-group">
+              <label for="regUsername">Username:</label>
+              <input type="text" id="regUsername" name="username" required />
+            </div>
+            <div class="form-group">
+              <label for="regPassword">Password:</label>
+              <input
+                type="password"
+                id="regPassword"
+                name="password"
+                required
+              />
+            </div>
+            <button type="submit" class="btn">Register</button>
+            <div id="registerError" class="error-message hidden"></div>
+            <div id="registerSuccess" class="success-message hidden"></div>
+          </form>
+          <p class="mt-4">
+            Already have an account?
+            <a href="#" id="showLogin" class="link">Login</a>
+          </p>
+        </div>
+      </div>
+
+      <div id="gameContainer" class="hidden">
+        <div class="flex justify-between items-center mb-4">
+          <h2 class="title">Red vs Blue Game of Life</h2>
+          <button id="logoutBtn" class="btn btn-danger">Logout</button>
+        </div>
+
+        <div class="game-info">
+          <div class="game-info-grid">
+            <div class="info-card">
+              <h3>Next Update In</h3>
+              <p id="timer" class="timer">5s</p>
+            </div>
+            <div class="info-card">
+              <h3>Red Team</h3>
+              <p id="redScore" class="score red-score">0</p>
+              <p id="redClusters" class="text-sm mt-2">Clusters: 0</p>
+            </div>
+            <div class="info-card">
+              <h3>Blue Team</h3>
+              <p id="blueScore" class="score blue-score">0</p>
+              <p id="blueClusters" class="text-sm mt-2">Clusters: 0</p>
+            </div>
+            <div class="info-card">
+              <h3>Round</h3>
+              <p id="roundCounter">1</p>
+              <p id="activityScore" class="text-sm mt-2">Activity: 0</p>
+            </div>
+          </div>
+          <div class="territory-bar mt-4">
+            <h3>Territory Control</h3>
+            <div class="progress-bar">
+              <div
+                id="territoryControl"
+                class="progress"
+                style="width: 0%"
+              ></div>
+            </div>
+            <p id="territoryPercent" class="text-sm text-center mt-1">0%</p>
+          </div>
+        </div>
+
+        <div class="game-layout">
+          <div id="grid" class="grid"></div>
+          <div class="game-controls">
+            <div class="info-card mb-4">
+              <h3>Game Rules</h3>
+              <ul class="mt-4 space-y-2">
+                <li>Red squares are obstacles</li>
+                <li>Click to place blue squares</li>
+                <li>Blue squares follow Conway's Game of Life rules</li>
+                <li>Grid updates every 5 seconds</li>
+              </ul>
+            </div>
+            <div class="info-card">
+              <h3>Controls</h3>
+              <ul class="mt-4 space-y-2">
+                <li>Click any empty cell to place a blue square</li>
+                <li>Cannot place on red squares</li>
+                <li>Strategy is key to survival!</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <!-- Game Over Overlay -->
+        <div id="gameOverOverlay" class="game-over-overlay">
+          <div class="game-over-content">
+            <h2 class="game-over-title">Victory!</h2>
+            <div class="game-over-stats">
+              <div class="stat-card">
+                <div class="stat-label">Total Rounds</div>
+                <div class="stat-value" id="finalRounds">0</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-label">Points Placed</div>
+                <div class="stat-value" id="finalPoints">0</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-label">Efficiency Ratio</div>
+                <div class="stat-value" id="finalEfficiency">0</div>
+              </div>
+            </div>
+            <p class="game-over-message victory-text">
+              Congratulations! The blue team has successfully eliminated all red obstacles.
+              Your strategic placement and timing were excellent!
+            </p>
+            <button class="play-again-btn" onclick="handlePlayAgain()">Play Again</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="{{ url_for('static', path='js/game.js') }}"></script>
+  </body>
+</html>
