@@ -9,6 +9,8 @@ from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 from pathlib import Path
 import asyncio
+import uvicorn
+import os
 
 from models import User, SessionLocal
 from schemas import Token, UserCreate
@@ -29,14 +31,6 @@ logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 
-from dotenv import load_dotenv
-import os
-
-# Load environment variables
-load_dotenv()
-
-if not os.getenv("SECRET_KEY"):
-    raise ValueError("No SECRET_KEY environment variable set. Please check your .env file.")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -206,3 +200,13 @@ async def get_grid():
 @app.get("/")
 async def read_root(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
+
+if __name__ == "__main__":
+    port = int(os.getenv("PORT", 10000))
+    
+    uvicorn.run(
+        "main:app",
+        host="0.0.0.0",  
+        port=port,
+        reload=True  
+    )
