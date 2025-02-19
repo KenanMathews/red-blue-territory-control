@@ -1,5 +1,5 @@
 from fastapi import WebSocket
-from typing import Set, Dict
+from typing import Set, Dict, Optional
 from game_logic import GameState
 import asyncio
 import logging
@@ -22,6 +22,7 @@ class GameManager:
         self.timer_lock = asyncio.Lock()
         self.state_lock = asyncio.Lock()
         self.pattern_manager = PatternManager()
+        self.game_loop: Optional[asyncio.Task] = None
 
         pattern = self.pattern_manager.get_random_pattern(min_difficulty=1, max_difficulty=5)
         self.game_state.initialize_obstacles(pattern.rle)
@@ -97,20 +98,78 @@ class GameManager:
             logging.error(f"Error broadcasting reset: {e}")
 
     async def connect(self, websocket: WebSocket):
-        """Handle new WebSocket connection"""
+        """Handle new WebSocket connection and start game loop if first connection"""
         await websocket.accept()
         self.connections[websocket] = True
+        
+        # Start game loop if this is the first connection
+        if len(self.connections) == 1 and (self.game_loop is None or self.game_loop.done()):
+            self.game_loop = asyncio.create_task(self.update_game_loop())
+        
         try:
             await self.send_state_update(websocket)
         except Exception as e:
             logging.error(f"Error in initial state update: {e}")
             await self.handle_disconnect(websocket)
+
     
     async def handle_disconnect(self, websocket: WebSocket):
-        """Handle WebSocket disconnection"""
+        """Handle WebSocket disconnection and cleanup game loop if no connections remain"""
         if websocket in self.connections:
             self.connections[websocket] = False
             del self.connections[websocket]
+            
+            # If this was the last connection, cancel the game loop
+            if not self.connections and self.game_loop and not self.game_loop.done():
+                self.game_loop.cancel()
+                try:
+                    await self.game_loop
+                except asyncio.CancelledError:
+                    pass
+                self.game_loop = None
+    
+    async def update_game_loop(self):
+        """Main game loop that updates game state and timer"""
+        while True:
+            try:
+                # Count down from 5 to 0
+                for i in range(5, -1, -1):
+                    await self.update_timer(i)
+                    if i > 0:  # Only sleep if not at 0
+                        await asyncio.sleep(1)
+                
+                # When timer hits 0, update game state
+                try:
+                    if self.game_state.game_over:
+                        async with asyncio.timeout(5.0):
+                            await self.reset_game()
+                    else:
+                        async with asyncio.timeout(2.0):
+                            await self.update_game()
+                            
+                            if self.game_state.game_over:
+                                await self.broadcast_state()
+                                await asyncio.sleep(5)
+                                async with asyncio.timeout(5.0):
+                                    await self.reset_game()
+                            
+                except TimeoutError as e:
+                    logging.error(f"Operation timed out: {str(e)}")
+                    if self.game_state.game_over:
+                        try:
+                            async with asyncio.timeout(5.0):
+                                await self.force_reset()
+                        except Exception as reset_error:
+                            logging.error(f"Failed to force reset: {reset_error}")
+                except Exception as e:
+                    logging.error(f"Error in game update: {e}")
+                    
+            except asyncio.CancelledError:
+                logging.info("Game loop cancelled")
+                break
+            except Exception as e:
+                logging.error(f"Unexpected error in game loop: {e}")
+                await asyncio.sleep(0.5)
     
     def is_connected(self, websocket: WebSocket) -> bool:
         """Check if a WebSocket is still connected"""
@@ -172,19 +231,20 @@ class GameManager:
             return
             
         try:
-            # Prepare message outside of the connection loop
+            # Convert numpy arrays and values to Python native types
             state = self.game_state.get_state().tolist()
             
-            # Calculate stats once
-            red_score = sum(row.count(1) for row in state)
-            blue_score = sum(row.count(2) for row in state)
-            total_cells = len(state) * len(state[0])
-            occupied_cells = red_score + blue_score
-            territory_control = (occupied_cells / total_cells) * 100 if total_cells > 0 else 0
+            # Calculate stats once, converting numpy values to native Python types
+            red_score = int(sum(row.count(1) for row in state))
+            blue_score = int(sum(row.count(2) for row in state))
+            total_cells = int(len(state) * len(state[0]))
+            occupied_cells = int(red_score + blue_score)
+            territory_control = float((occupied_cells / total_cells) * 100 if total_cells > 0 else 0)
             
-            red_clusters = self._count_clusters(state, 1)
-            blue_clusters = self._count_clusters(state, 2)
+            red_clusters = int(self._count_clusters(state, 1))
+            blue_clusters = int(self._count_clusters(state, 2))
             
+            # Prepare message with all numeric values converted to native Python types
             message = {
                 "type": "grid_update",
                 "grid": state,
@@ -193,24 +253,40 @@ class GameManager:
                     "blue": blue_score
                 },
                 "stats": {
-                    "territory_control": round(territory_control, 2),
+                    "territory_control": round(float(territory_control), 2),
                     "red_clusters": red_clusters,
                     "blue_clusters": blue_clusters,
-                    "activity": self.game_state.get_changes_count(),
-                    "current_round": self.game_state.round_count,
-                    "points_placed": self.game_state.points_placed,
+                    "activity": int(self.game_state.get_changes_count()),
+                    "current_round": int(self.game_state.round_count),
+                    "points_placed": int(self.game_state.points_placed),
                     "last_update": self.game_state.last_update_time.isoformat() if self.game_state.last_update_time else None
                 },
-                "timer": self.timer,
-                "game_over": self.game_state.game_over
+                "timer": int(self.timer),
+                "game_over": bool(self.game_state.game_over)
             }
             
             if self.game_state.game_over and self.game_state.final_stats:
-                message["final_stats"] = self.game_state.final_stats
+                # Convert all numeric values in final_stats to native Python types
+                final_stats = self.game_state.final_stats.copy()
+                if "stats" in final_stats:
+                    stats = final_stats["stats"]
+                    final_stats["stats"] = {
+                        "total_rounds": int(stats["total_rounds"]),
+                        "points_placed": int(stats["points_placed"]),
+                        "efficiency_ratio": float(stats["efficiency_ratio"]),
+                        "speed_rating": float(stats["speed_rating"]),
+                        "clicks_per_round": float(stats["clicks_per_round"]),
+                        "click_efficiency": float(stats["click_efficiency"]),
+                        "initial_red_count": int(stats["initial_red_count"])
+                    }
+                message["final_stats"] = final_stats
+            
+            # Create a list of connections to avoid modification during iteration
+            connections = list(self.connections.keys())
             
             # Use gather with return_exceptions=True for parallel sends
             tasks = []
-            for websocket in list(self.connections.keys()):
+            for websocket in connections:
                 if self.is_connected(websocket):
                     tasks.append(self.send_message_to_client(websocket, message))
             
@@ -218,7 +294,7 @@ class GameManager:
                 results = await asyncio.gather(*tasks, return_exceptions=True)
                 
                 # Handle any failed sends
-                for websocket, result in zip(self.connections.keys(), results):
+                for websocket, result in zip(connections, results):
                     if isinstance(result, Exception):
                         logging.error(f"Failed to send to client: {result}")
                         await self.handle_disconnect(websocket)
@@ -241,8 +317,11 @@ class GameManager:
         if not self.connections:
             return
             
+        # Create a list of connections to avoid modification during iteration
+        connections = list(self.connections.keys())
         dead_connections = set()
-        for websocket in self.connections.keys():
+        
+        for websocket in connections:
             if not self.is_connected(websocket):
                 dead_connections.add(websocket)
                 continue

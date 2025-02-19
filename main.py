@@ -34,15 +34,14 @@ logging.basicConfig(
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup
-    game_loop = asyncio.create_task(update_game_loop())
     yield
-    # Shutdown
-    game_loop.cancel()
-    try:
-        await game_loop
-    except asyncio.CancelledError:
-        pass
+    if game_manager.game_loop and not game_manager.game_loop.done():
+        game_manager.game_loop.cancel()
+        try:
+            await game_manager.game_loop
+        except asyncio.CancelledError:
+            pass
+
 
 app = FastAPI(lifespan=lifespan)
 
@@ -156,12 +155,25 @@ async def websocket_endpoint(websocket: WebSocket):
 async def update_game_loop():
     while True:
         try:
+            # Check if there are any active connections
+            if not game_manager.connections:
+                await asyncio.sleep(0.5)
+                continue
+
             # Count down from 5 to 0
             for i in range(5, -1, -1):
+                # Check connections before each timer update
+                if not game_manager.connections:
+                    break
+                    
                 await game_manager.update_timer(i)
                 if i > 0:  # Only sleep if not at 0
                     await asyncio.sleep(1)
             
+            # Skip game update if no connections
+            if not game_manager.connections:
+                continue
+
             # When timer hits 0, update game state with extended timeout for game over
             try:
                 if game_manager.game_state.game_over:
