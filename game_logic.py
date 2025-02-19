@@ -1,10 +1,12 @@
 import numpy as np
-from typing import Tuple, Set
+from typing import Tuple, Set, Dict, Optional
 from dataclasses import dataclass
 import threading
 from datetime import datetime, timedelta
 import logging
 import math
+from level_manager import LevelManager
+
 
 # Configure logging
 logging.basicConfig(
@@ -20,9 +22,6 @@ class Point:
 
 class GameState:
     def __init__(self, width: int = 30, height: int = 30):
-        self.width = width
-        self.height = height
-        self.grid = np.zeros((height, width), dtype=int)
         self.last_grid = None
         self.last_update_time = None
         self.round_count = 0
@@ -33,16 +32,57 @@ class GameState:
         self.final_stats = None
         self.initial_red_count = 0  
         self.lock = threading.Lock()
+        self.level_manager = LevelManager()
+        self.current_score = 0
+        
+        self.initialize_obstacles()
 
-    def initialize_obstacles(self, rle_pattern: str):
-        """Initialize red obstacles from RLE pattern"""
+
+    def initialize_level(self):
+        """Initialize the current level"""
         with self.lock:
-            print(rle_pattern)
-            # Parse RLE and set obstacles
-            x, y = 0, 0
+            current_level = self.level_manager.get_current_level()
+            self.initialize_obstacles(current_level.pattern)
+            return current_level
+        
+    def initialize_obstacles(self, pattern_id: Optional[int] = None):
+        """
+        Initialize obstacles for a specific pattern or current pattern
+        Args:
+            pattern_id: Optional pattern ID to initialize. If None, uses current pattern
+        Returns:
+            dict: Information about the initialized pattern
+        """
+        with self.lock:
+            # Get pattern information
+            pattern_info = self.level_manager.get_pattern_info(pattern_id)
+            
+            # Check if grid size meets minimum requirements
+            self.width, self.height = pattern_info['min_grid_size']
+            
+            self.grid = np.zeros((self.width, self.height), dtype=int)
+            min_width, min_height = pattern_info['min_grid_size']
+            if self.width < min_width or self.height < min_height:
+                raise ValueError(
+                    f"Grid size ({self.width}x{self.height}) too small for pattern "
+                    f"{pattern_info['pattern_id']}. Minimum size required: {min_width}x{min_height}"
+                )
+
+            # Clear the grid
+            self.grid = np.zeros((self.height, self.width), dtype=int)
+            self.grid_size = max(min_width, min_height)  # Use square grid
+
+            
+            # Get pattern dimensions and calculate starting position to center pattern
+            pattern_width, pattern_height = self.level_manager.get_pattern_dimensions(pattern_id)
+            start_x = (self.width - pattern_width) // 2
+            start_y = (self.height - pattern_height) // 2
+            
+            # Place obstacles
+            x, y = start_x, start_y
             count = ""
             
-            for char in rle_pattern:
+            for char in pattern_info['rle']:
                 if char.isdigit():
                     count += char
                     continue
@@ -52,7 +92,7 @@ class GameState:
                 
                 if char == '$':  # New line
                     y += repeat
-                    x = 0
+                    x = start_x
                 elif char == 'b':  # Dead cell
                     x += repeat
                 elif char == 'o':  # Live cell (obstacle)
@@ -62,7 +102,19 @@ class GameState:
                         x += 1
                 elif char == '!':  # End of pattern
                     break
-        self.initial_red_count = np.sum(self.grid == 1)
+
+            # Update game state for new pattern
+            self.initial_red_count = np.sum(self.grid == 1)
+            self.round_count = 0
+            self.points_placed = 0
+            self.game_over = False
+            self.final_stats = None
+            self.last_update_time = None
+            self.next_update_time = None
+            self.current_score = 0
+
+            return pattern_info
+
 
     def calculate_victory_ranking(self) -> dict:
         """Calculate victory ranking with enhanced efficiency metrics."""
@@ -95,6 +147,7 @@ class GameState:
             0.3 * speed_rating * 1000 +      # 30% weight on speed
             0.2 * click_efficiency * 1000     # 20% weight on click distribution
         ))))
+        self.current_score = weighted_score
 
         # Format efficiency metrics
         detailed_stats = {
@@ -140,6 +193,34 @@ class GameState:
             "stats": detailed_stats,
             "rank_info": rank_info
         }
+    
+    def _calculate_rank_info(self, score: int) -> Dict:
+        """Calculate rank information based on score"""
+        if score >= 900:
+            return {
+                'title': 'Master Tactician',
+                'description': 'Perfect execution! Excellent point efficiency and timing.'
+            }
+        elif score >= 750:
+            return {
+                'title': 'Elite Commander',
+                'description': 'Great work! Very efficient use of resources.'
+            }
+        elif score >= 600:
+            return {
+                'title': 'Skilled Strategist',
+                'description': 'Well done! Consider using fewer points for better efficiency.'
+            }
+        elif score >= 450:
+            return {
+                'title': 'Tactical Operator',
+                'description': 'Good job! Try to eliminate obstacles with fewer points.'
+            }
+        else:
+            return {
+                'title': 'Aspiring Strategist',
+                'description': 'Victory achieved! Try using fewer points to improve efficiency.'
+            }
         
     def add_player_point(self, x: int, y: int) -> bool:
         """Add a blue player point if position is valid"""

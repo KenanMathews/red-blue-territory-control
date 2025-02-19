@@ -6,6 +6,7 @@ import logging
 from starlette.websockets import WebSocketState
 import logging
 from pattern_manager import PatternManager
+import random
 
 # Configure logging
 logging.basicConfig(
@@ -24,10 +25,7 @@ class GameManager:
         self.pattern_manager = PatternManager()
         self.game_loop: Optional[asyncio.Task] = None
 
-        pattern = self.pattern_manager.get_random_pattern(min_difficulty=1, max_difficulty=5)
-        self.game_state.initialize_obstacles(pattern.rle)
-
-        self.current_pattern = pattern
+        self.current_pattern = self.game_state.initialize_obstacles(random.randint(1, 8))['rle']
 
     async def reset_game(self):
         """Reset the game with a new random pattern and broadcast the reset"""
@@ -58,9 +56,7 @@ class GameManager:
         self.game_state = GameState()
         
         # Get new random pattern
-        pattern = self.pattern_manager.get_random_pattern(min_difficulty=1, max_difficulty=5)
-        self.game_state.initialize_obstacles(pattern.rle)
-        self.current_pattern = pattern
+        self.current_pattern = self.game_state.initialize_obstacles(random.randint(1, 8))['rle']
         
         # Reset timer
         async with self.timer_lock:
@@ -101,6 +97,11 @@ class GameManager:
         """Handle new WebSocket connection and start game loop if first connection"""
         await websocket.accept()
         self.connections[websocket] = True
+        config_message = {
+            "type": "grid_config",
+            "grid_size": self.game_state.grid_size,
+        }
+        await websocket.send_json(config_message)
         
         # Start game loop if this is the first connection
         if len(self.connections) == 1 and (self.game_loop is None or self.game_loop.done()):
@@ -248,6 +249,7 @@ class GameManager:
             message = {
                 "type": "grid_update",
                 "grid": state,
+                "grid_size": self.game_state.grid_size,
                 "scores": {
                     "red": red_score,
                     "blue": blue_score

@@ -1,5 +1,5 @@
 // Game constants and state
-const GRID_SIZE = 30;
+let GRID_SIZE = 30;
 let isDrawing = false;
 let lastCell = null;
 const visitedCells = new Set();
@@ -9,6 +9,14 @@ let grid = Array(GRID_SIZE)
 let updateTimer = 5;
 let serverTimer = 5;
 let timerInterval = null;
+
+function updateGridSize(newSize) {
+  if (typeof newSize == "number" && GRID_SIZE !== newSize) {
+    GRID_SIZE = newSize;
+    grid = Array(GRID_SIZE).fill().map(() => Array(GRID_SIZE).fill(0));
+    createGrid();
+  }
+}
 
 // WebSocket connection management
 class WebSocketManager {
@@ -321,13 +329,16 @@ function handleServerMessage(event) {
   try {
     const data = JSON.parse(event.data);
     switch (data.type) {
+      case "grid_config":
+        // Initial grid configuration
+        updateGridSize(data.grid_size);
+        break;
       case "game_reset":
         // Handle game reset
         isGameOver = false;
         gameOverOverlay.classList.remove("visible");
 
         // Reset stats display
-        document.getElementById("finalRounds").textContent = "0";
         document.getElementById("finalPoints").textContent = "0";
         document.getElementById("finalEfficiency").textContent = "0";
 
@@ -347,6 +358,7 @@ function handleServerMessage(event) {
   
         case "grid_update":
           if (Array.isArray(data.grid)) {
+            updateGridSize(data.grid_size);
             updateGrid(data.grid);
             updateGameInfo(data);
   
@@ -568,6 +580,7 @@ const gameOverOverlay = document.getElementById("gameOverOverlay");
 
 // Function to handle game over state
 function handleGameOver(finalStats) {
+  if (isGameOver) return;
   isGameOver = true;
 
   const stats = finalStats.stats;
@@ -607,14 +620,15 @@ function handleGameOver(finalStats) {
       }
   ];
 
-  // Get all stat card elements
+  // Get stats container and clear existing stats
   const statsContainer = document.querySelector('.game-over-stats');
-  statsContainer.innerHTML = ''; // Clear existing stats
+  statsContainer.innerHTML = '';
 
   // Create and append stat cards
-  statCards.forEach(stat => {
+  statCards.forEach((stat, index) => {
       const card = document.createElement('div');
       card.className = 'stat-card';
+      card.style.animationDelay = `${index * 0.1}s`;
       
       card.innerHTML = `
           <div class="stat-label">${stat.label}</div>
@@ -628,29 +642,22 @@ function handleGameOver(finalStats) {
       const valueElement = card.querySelector('.stat-value');
       valueElement.dataset.finalValue = stat.value;
       valueElement.dataset.suffix = stat.suffix || '';
-  });
 
-  // Show the overlay
-  gameOverOverlay.classList.add('visible');
-
-  // Animate the stats
-  const statElements = document.querySelectorAll('.stat-card');
-  statElements.forEach(statCard => {
-      const valueElement = statCard.querySelector('.stat-value');
-      if (valueElement) {
-          const finalValue = parseFloat(valueElement.dataset.finalValue);
-          const suffix = valueElement.dataset.suffix;
-          
+      // Start the animation after a brief delay
+      setTimeout(() => {
           animateValue(
               valueElement,
               0,
-              finalValue,
+              parseFloat(stat.value),
               1500,
-              finalValue % 1 === 0 ? 0 : 1,
-              suffix
+              stat.value % 1 === 0 ? 0 : 1,
+              stat.suffix || ''
           );
-      }
+      }, index * 100);
   });
+
+  // Show the overlay with fade-in
+  gameOverOverlay.classList.add('visible');
 }
 
 // Function to handle play again button click
@@ -659,7 +666,6 @@ function handlePlayAgain() {
   gameOverOverlay.classList.remove("visible");
 
   // Reset stats display
-  document.getElementById("finalRounds").textContent = "0";
   document.getElementById("finalPoints").textContent = "0";
   document.getElementById("finalEfficiency").textContent = "0";
 
@@ -675,6 +681,8 @@ function handlePlayAgain() {
 
 // Utility function to animate number counting
 function animateValue(element, start, end, duration, decimals = 0, suffix = "") {
+  if (element === null) return;
+  
   const range = end - start;
   const minTimer = 50;
   let stepTime = Math.abs(Math.floor(duration / range));
@@ -682,18 +690,24 @@ function animateValue(element, start, end, duration, decimals = 0, suffix = "") 
 
   let current = start;
   const step = range / (duration / stepTime);
+  let lastTimestamp = null;
 
-  function updateValue() {
-      current += step;
+  function update(timestamp) {
+      if (!lastTimestamp) lastTimestamp = timestamp;
+      const delta = timestamp - lastTimestamp;
+
+      current += step * (delta / stepTime);
       if ((step > 0 && current >= end) || (step < 0 && current <= end)) {
           element.textContent = end.toFixed(decimals) + suffix;
           return;
       }
+
       element.textContent = current.toFixed(decimals) + suffix;
-      requestAnimationFrame(updateValue);
+      lastTimestamp = timestamp;
+      requestAnimationFrame(update);
   }
 
-  requestAnimationFrame(updateValue);
+  requestAnimationFrame(update);
 }
 
 // WebSocket connection

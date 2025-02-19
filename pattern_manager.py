@@ -1,107 +1,192 @@
-import random
 from dataclasses import dataclass
-from typing import List, Dict
+from typing import List, Dict, Optional, Tuple
+import random
 
 @dataclass
 class GamePattern:
+    id: int
     name: str
     description: str
-    difficulty: int  # 1-5, where 5 is most difficult
+    difficulty: int  # 1-5
     rle: str
-    min_grid_size: tuple[int, int]  # minimum (width, height) needed
+    min_grid_size: tuple[int, int]
+    tactical_notes: Optional[str] = None  # Additional tactical information
+    next_pattern_id: Optional[int] = None
 
 class PatternManager:
     def __init__(self):
-        self.patterns: List[GamePattern] = [
-            GamePattern(
-                name="Simple Blocks",
-                description="A series of small block formations scattered across the grid",
+        self.patterns: Dict[int, GamePattern] = {}
+        self._initialize_patterns()
+
+    def _initialize_patterns(self):
+        """Initialize all game patterns optimized for tactical gameplay"""
+        from dataclasses import dataclass
+from typing import List, Dict, Optional, Tuple
+import random
+
+@dataclass
+class GamePattern:
+    id: int
+    name: str
+    description: str
+    difficulty: int  # 1-5
+    rle: str
+    min_grid_size: tuple[int, int]
+    tactical_notes: Optional[str] = None
+    next_pattern_id: Optional[int] = None
+
+class PatternManager:
+    def __init__(self):
+        self.patterns: Dict[int, GamePattern] = {}
+        self._initialize_patterns()
+
+    def _initialize_patterns(self):
+        """Initialize all game patterns with denser tactical layouts"""
+        self.patterns = {
+            1: GamePattern(
+                id=1,
+                name="Distributed Defense",
+                description="Multiple defensive positions spread across the grid",
                 difficulty=1,
-                rle="2o$2o5$7o$7o5$12o$12o5$17o$17o!",
-                min_grid_size=(20, 20)
+                rle="3o2b3o2b3o$b2ob2ob2o5$3o2b3o2b3o$3b2ob2ob2o!",  # Multiple groups spread out
+                min_grid_size=(20, 20),
+                tactical_notes="Learn to coordinate across multiple positions",
+                next_pattern_id=2
             ),
-            GamePattern(
-                name="Spiral Challenge",
-                description="A spiral pattern that requires strategic elimination",
-                difficulty=3,
-                rle="2o$2o2$4o$4o2$6o$6o2$8o$8o2$10o$10o2$12o$12o!",
-                min_grid_size=(25, 25)
-            ),
-            GamePattern(
-                name="Fortress",
-                description="A fortified structure with multiple layers",
-                difficulty=4,
-                rle="4o$o2bo$o2bo$4o3$6o$o4bo$o4bo$6o!",
-                min_grid_size=(30, 30)
-            ),
-            GamePattern(
-                name="Scattered Outposts",
-                description="Multiple small fortifications that must be eliminated",
+            2: GamePattern(
+                id=2,
+                name="Network Defense",
+                description="Interconnected defensive networks",
                 difficulty=2,
-                rle="2o2$2o5$7o2$7o5$12o2$12o!",
-                min_grid_size=(20, 20)
+                rle="3o2bo2b3o$o4bo4bo$3o2bo2b3o5$2o2b3o2b2o$o2b5o2bo$2o2b3o2b2o!",  # Connected positions
+                min_grid_size=(20, 20),
+                tactical_notes="Practice managing interconnected defensive zones",
+                next_pattern_id=3
             ),
-            GamePattern(
-                name="Diamond Formation",
-                description="A diamond-shaped pattern requiring careful strategy",
+            3: GamePattern(
+                id=3,
+                name="Grid Control",
+                description="Strategic control points across the grid",
+                difficulty=2,
+                rle="2o2b4o$2ob6o$4o2b2o3$b2o2b2o2b2o$3o2b2o2b3o$b2o2b2o2b2o3$2o2b4o$2ob6o$4o2b2o!",
+                min_grid_size=(25, 25),
+                tactical_notes="Control multiple strategic points",
+                next_pattern_id=4
+            ),
+            4: GamePattern(
+                id=4,
+                name="Complex Grid",
+                description="Multiple fortified positions with support",
                 difficulty=3,
-                rle="2bo$3bo$o3bo$5o2$5o$o3bo$3bo$2bo!",
-                min_grid_size=(25, 25)
+                rle="3o2b3o2b3o$o2b2ob2o2bo$3o2b3o2b3o4$2b4o4b$bo6bo$bo6bo$2b4o4b4$3o2b3o2b3o$o2b2ob2o2bo$3o2b3o2b3o!",
+                min_grid_size=(30, 30),
+                tactical_notes="Coordinate attacks across multiple strongpoints",
+                next_pattern_id=5
             ),
-            GamePattern(
-                name="Maze Runner",
-                description="A maze-like pattern that tests tactical thinking",
+            5: GamePattern(
+                id=5,
+                name="Grid Sectors",
+                description="Multiple defensive sectors",
+                difficulty=3,
+                rle="2o2b2o2b2o2b2o$2ob2ob2ob2ob2o$2o2b2o2b2o2b2o4$b3o4b3o$bo2b4o2bo$b3o4b3o4$2o2b2o2b2o2b2o$2ob2ob2ob2ob2o$2o2b2o2b2o2b2o!",
+                min_grid_size=(30, 30),
+                tactical_notes="Manage multiple defensive sectors",
+                next_pattern_id=6
+            ),
+            6: GamePattern(
+                id=6,
+                name="Advanced Grid",
+                description="Complex grid-wide defensive system",
+                difficulty=4,
+                rle="3o2b4o2b3o$o2b2ob2ob2o2bo$3o2b4o2b3o3$2b6o6b$bo2b4o2bo$bo2b4o2bo$2b6o6b3$3o2b4o2b3o$o2b2ob2ob2o2bo$3o2b4o2b3o!",
+                min_grid_size=(35, 35),
+                tactical_notes="Advanced grid control tactics",
+                next_pattern_id=7
+            ),
+            7: GamePattern(
+                id=7,
+                name="Fortress Network",
+                description="Network of fortified positions",
+                difficulty=4,
+                rle="4o2b4o2b4o$o3bob4obo3bo$4o2b4o2b4o3$2b3o6b3o$bo2b8o2bo$bo2b8o2bo$2b3o6b3o3$4o2b4o2b4o$o3bob4obo3bo$4o2b4o2b4o!",
+                min_grid_size=(35, 35),
+                tactical_notes="Coordinate attacks on multiple fortified positions",
+                next_pattern_id=8
+            ),
+            8: GamePattern(
+                id=8,
+                name="Elite Grid",
+                description="Complex grid-wide elite defensive system",
                 difficulty=5,
-                rle="20o$o18bo$o3bo10bo3bo$o3bo10bo3bo$o3bo10bo3bo$o18bo$20o!",
-                min_grid_size=(30, 30)
+                rle="3o2b5o2b3o$o2b2ob3ob2o2bo$3o2b5o2b3o3$2b8o8b$bo3b6o3bo$bo3b6o3bo$2b8o8b3$3o2b5o2b3o$o2b2ob3ob2o2bo$3o2b5o2b3o4$b4o6b4o$2o2b8o2b2o$b4o6b4o!",
+                min_grid_size=(40, 40),
+                tactical_notes="Master complex grid-wide tactics",
+                next_pattern_id=9
             ),
-            GamePattern(
-                name="Cross Roads",
-                description="Intersecting lines creating a cross pattern",
-                difficulty=2,
-                rle="2bo$2bo$2bo$5o$2bo$2bo$2bo!",
-                min_grid_size=(20, 20)
-            ),
-            GamePattern(
-                name="Corner Fortress",
-                description="Strong fortifications in each corner",
-                difficulty=4,
-                rle="3o2$o2bo2$3o7$14o2$12bo2bo2$14o!",
-                min_grid_size=(30, 30)
-            ),
-        ]
+            9: GamePattern(
+                id=9,
+                name="Master Grid",
+                description="Ultimate grid-wide challenge",
+                difficulty=5,
+                rle="4o2b6o2b4o$o3bob6obo3bo$4o2b6o2b4o3$2b4o8b4o$bo2b12o2bo$bo2b12o2bo$2b4o8b4o3$4o2b6o2b4o$o3bob6obo3bo$4o2b6o2b4o4$b5o8b5o$2o3b10o3b2o$b5o8b5o!",
+                min_grid_size=(45, 45),
+                tactical_notes="Ultimate test of grid control",
+                next_pattern_id=1
+            )
+        }
+
+    def get_pattern_by_id(self, pattern_id: int) -> Optional[GamePattern]:
+        """Get a specific pattern by ID"""
+        return self.patterns.get(pattern_id)
 
     def get_random_pattern(self, min_difficulty: int = 1, max_difficulty: int = 5) -> GamePattern:
-        """Get a random pattern within the specified difficulty range."""
-        valid_patterns = [p for p in self.patterns 
+        """Get a random pattern within the specified difficulty range"""
+        valid_patterns = [p for p in self.patterns.values() 
                          if min_difficulty <= p.difficulty <= max_difficulty]
         if not valid_patterns:
             raise ValueError(f"No patterns found with difficulty between {min_difficulty} and {max_difficulty}")
         return random.choice(valid_patterns)
 
-    def get_pattern_by_name(self, name: str) -> GamePattern:
-        """Get a specific pattern by name."""
-        for pattern in self.patterns:
-            if pattern.name.lower() == name.lower():
-                return pattern
-        raise ValueError(f"Pattern '{name}' not found")
-
     def get_all_patterns(self) -> List[GamePattern]:
-        """Get all available patterns."""
-        return self.patterns.copy()
+        """Get all available patterns"""
+        return list(self.patterns.values())
 
     def get_patterns_by_difficulty(self, difficulty: int) -> List[GamePattern]:
-        """Get all patterns of a specific difficulty level."""
-        return [p for p in self.patterns if p.difficulty == difficulty]
+        """Get all patterns of a specific difficulty level"""
+        return [p for p in self.patterns.values() if p.difficulty == difficulty]
 
-    def add_pattern(self, pattern: GamePattern) -> None:
-        """Add a new pattern to the collection."""
-        # Validate pattern
-        if any(p.name.lower() == pattern.name.lower() for p in self.patterns):
-            raise ValueError(f"Pattern with name '{pattern.name}' already exists")
-        if not 1 <= pattern.difficulty <= 5:
-            raise ValueError("Difficulty must be between 1 and 5")
-        if not pattern.rle:
-            raise ValueError("RLE pattern cannot be empty")
+    def calculate_pattern_dimensions(self, pattern: GamePattern) -> Tuple[int, int]:
+        """Calculate the dimensions of a pattern from its RLE string"""
+        max_x, max_y = 0, 0
+        temp_x, temp_y = 0, 0
+        count = ""
         
-        self.patterns.append(pattern)
+        for char in pattern.rle:
+            if char.isdigit():
+                count += char
+                continue
+                
+            repeat = int(count) if count else 1
+            count = ""
+            
+            if char == '$':  # New line
+                temp_y += repeat
+                temp_x = 0
+            elif char == 'b':  # Dead cell
+                temp_x += repeat
+            elif char == 'o':  # Live cell
+                temp_x += repeat
+            elif char == '!':  # End of pattern
+                break
+                
+            max_x = max(max_x, temp_x)
+            max_y = max(max_y, temp_y)
+        
+        return max_x, max_y + 1  # Add 1 to y for zero-based indexing
+    
+    def get_recommended_blue_count(self, pattern: GamePattern) -> int:
+        """Get recommended number of blue units based on pattern difficulty and size"""
+        dims = self.calculate_pattern_dimensions(pattern)
+        base_count = max(3, pattern.difficulty * 2)  # Scale with difficulty
+        size_factor = (dims[0] * dims[1]) / 25  # Scale with pattern size
+        return min(10, max(3, int(base_count + size_factor)))  # Between 3 and 10 units
