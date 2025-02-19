@@ -37,6 +37,7 @@ class GameState:
     def initialize_obstacles(self, rle_pattern: str):
         """Initialize red obstacles from RLE pattern"""
         with self.lock:
+            print(rle_pattern)
             # Parse RLE and set obstacles
             x, y = 0, 0
             count = ""
@@ -64,53 +65,81 @@ class GameState:
         self.initial_red_count = np.sum(self.grid == 1)
 
     def calculate_victory_ranking(self) -> dict:
-        """Calculate victory ranking and return detailed stats"""
+        """Calculate victory ranking with enhanced efficiency metrics."""
         if not self.game_over:
             return None
 
-        # Calculate base scores
-        point_efficiency = self.initial_red_count / max(self.points_placed, self.initial_red_count)
+        # Points efficiency calculation with stronger penalty for excess points
+        points_ratio = self.points_placed / self.initial_red_count
+        # Exponential penalty for using more points than necessary
+        if points_ratio > 1:
+            point_efficiency = math.exp(-(points_ratio - 1) * 2)  # Stronger decay for excess points
+        else:
+            point_efficiency = 1.0  # Perfect score for using fewer or equal points
+        
+        # Speed calculation relative to theoretical minimum
         theoretical_min_rounds = math.ceil(self.initial_red_count / 2)
-        speed_rating = math.exp(-(self.round_count - theoretical_min_rounds) / 10)
+        extra_rounds = self.round_count - theoretical_min_rounds
+        speed_rating = math.exp(-extra_rounds / 15)  # Decay for extra rounds
+        
+        # Click efficiency based on points per round
+        optimal_clicks_per_round = 2.5
         clicks_per_round = self.points_placed / max(self.round_count, 1)
-        click_efficiency = math.exp(-(clicks_per_round - 2) / 3)
+        click_deviation = abs(clicks_per_round - optimal_clicks_per_round)
+        click_efficiency = math.exp(-click_deviation / 2)
 
         # Calculate weighted score (0-1000)
+        # Increased weight on point efficiency to punish excess points more
         weighted_score = round(min(1000, max(0, (
-            0.4 * point_efficiency * 1000 +
-            0.4 * speed_rating * 1000 +
-            0.2 * click_efficiency * 1000
+            0.5 * point_efficiency * 1000 +  # 50% weight on point efficiency
+            0.3 * speed_rating * 1000 +      # 30% weight on speed
+            0.2 * click_efficiency * 1000     # 20% weight on click distribution
         ))))
 
-        # Determine rank information
+        # Format efficiency metrics
+        detailed_stats = {
+            "total_rounds": self.round_count,
+            "points_placed": self.points_placed,
+            "efficiency_ratio": round(point_efficiency * 100, 1),
+            "speed_rating": round(speed_rating * 100, 1),
+            "clicks_per_round": round(clicks_per_round, 1),
+            "click_efficiency": round(click_efficiency * 100, 1),
+            "initial_red_count": self.initial_red_count,
+            "points_ratio": round(points_ratio * 100, 1)  # Added for context
+        }
+
+        # Determine rank information with updated descriptions
         rank_info = {
             'score': weighted_score,
             'title': 'Aspiring Strategist',
-            'description': 'You achieved victory! Focus on efficiency to improve your rank.'
+            'description': 'Victory achieved! Try using fewer points to improve efficiency.'
         }
 
         if weighted_score >= 900:
             rank_info.update({
                 'title': 'Master Tactician',
-                'description': 'Perfect execution! Your strategy was flawless.'
+                'description': 'Perfect execution! Excellent point efficiency and timing.'
             })
-        elif weighted_score >= 700:
+        elif weighted_score >= 750:
             rank_info.update({
-                'title': 'Excellent Strategist',
-                'description': 'Outstanding performance! Your approach was highly effective.'
+                'title': 'Elite Commander',
+                'description': 'Great work! Very efficient use of resources.'
             })
-        elif weighted_score >= 500:
+        elif weighted_score >= 600:
             rank_info.update({
-                'title': 'Skilled Commander',
-                'description': 'Well played! You showed good strategic thinking.'
+                'title': 'Skilled Strategist',
+                'description': 'Well done! Consider using fewer points for better efficiency.'
             })
-        elif weighted_score >= 300:
+        elif weighted_score >= 450:
             rank_info.update({
-                'title': 'Capable Leader',
-                'description': 'Good job! Keep practicing to improve your efficiency.'
+                'title': 'Tactical Operator',
+                'description': 'Good job! Try to eliminate obstacles with fewer points.'
             })
 
-        return rank_info
+        return {
+            "stats": detailed_stats,
+            "rank_info": rank_info
+        }
         
     def add_player_point(self, x: int, y: int) -> bool:
         """Add a blue player point if position is valid"""
@@ -131,16 +160,21 @@ class GameState:
         if red_cells == 0 and not self.game_over:
             self.game_over = True
             
-            # Calculate victory ranking
-            rank_info = self.calculate_victory_ranking()
+            # Calculate victory stats and ranking
+            victory_data = self.calculate_victory_ranking()
             
-            # Update final stats with ranking information
+            # Set final stats with all necessary information
             self.final_stats = {
-                "total_rounds": self.round_count,
-                "points_placed": self.points_placed,
-                "efficiency_ratio": self.round_count / max(self.points_placed, 1),
-                "initial_red_count": self.initial_red_count,
-                "rank_info": rank_info
+                "stats": {
+                    "total_rounds": self.round_count,
+                    "points_placed": self.points_placed,
+                    "efficiency_ratio": victory_data["stats"]["efficiency_ratio"],
+                    "speed_rating": victory_data["stats"]["speed_rating"],
+                    "clicks_per_round": victory_data["stats"]["clicks_per_round"],
+                    "click_efficiency": victory_data["stats"]["click_efficiency"],
+                    "initial_red_count": self.initial_red_count,
+                },
+                "rank_info": victory_data["rank_info"]
             }
             return True
         return False
@@ -263,10 +297,18 @@ class GameState:
         # Check win condition
         if len(red_positions) == 0 and not self.game_over:
             self.game_over = True
+            victory_data = self.calculate_victory_ranking()
             self.final_stats = {
-                "total_rounds": self.round_count,
-                "points_placed": self.points_placed,
-                "efficiency_ratio": self.round_count / max(self.points_placed, 1)
+                "stats": {
+                    "total_rounds": self.round_count,
+                    "points_placed": self.points_placed,
+                    "efficiency_ratio": victory_data["stats"]["efficiency_ratio"],
+                    "speed_rating": victory_data["stats"]["speed_rating"],
+                    "clicks_per_round": victory_data["stats"]["clicks_per_round"],
+                    "click_efficiency": victory_data["stats"]["click_efficiency"],
+                    "initial_red_count": self.initial_red_count,
+                },
+                "rank_info": victory_data["rank_info"]
             }
         
 

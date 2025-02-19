@@ -1,5 +1,8 @@
 // Game constants and state
 const GRID_SIZE = 30;
+let isDrawing = false;
+let lastCell = null;
+const visitedCells = new Set();
 let grid = Array(GRID_SIZE)
   .fill()
   .map(() => Array(GRID_SIZE).fill(0));
@@ -433,10 +436,92 @@ function createGrid() {
       cell.className = "cell";
       cell.dataset.x = x;
       cell.dataset.y = y;
-      cell.addEventListener("click", () => handleCellClick(x, y));
+      
+      // Mouse events for desktop
+      cell.addEventListener("mousedown", (e) => {
+        e.preventDefault(); // Prevent default drag behavior
+        isDrawing = true;
+        handleCellInteraction(x, y);
+      });
+      
+      cell.addEventListener("mouseover", (e) => {
+        if (isDrawing) {
+          handleCellInteraction(x, y);
+        }
+      });
+      
+      // Touch events for mobile
+      cell.addEventListener("touchstart", (e) => {
+        e.preventDefault(); // Prevent scrolling
+        isDrawing = true;
+        const touch = e.touches[0];
+        const target = document.elementFromPoint(touch.clientX, touch.clientY);
+        if (target && target.classList.contains("cell")) {
+          const { x, y } = target.dataset;
+          handleCellInteraction(parseInt(x), parseInt(y));
+        }
+      });
+      
+      cell.addEventListener("touchmove", (e) => {
+        e.preventDefault(); // Prevent scrolling
+        if (isDrawing) {
+          const touch = e.touches[0];
+          const target = document.elementFromPoint(touch.clientX, touch.clientY);
+          if (target && target.classList.contains("cell")) {
+            const { x, y } = target.dataset;
+            handleCellInteraction(parseInt(x), parseInt(y));
+          }
+        }
+      });
+      
       elements.gridContainer.appendChild(cell);
     }
   }
+  
+  // Global event listeners for ending drawing
+  document.addEventListener("mouseup", () => {
+    isDrawing = false;
+    lastCell = null;
+    visitedCells.clear();
+  });
+  
+  document.addEventListener("touchend", () => {
+    isDrawing = false;
+    lastCell = null;
+    visitedCells.clear();
+  });
+  
+  // Prevent context menu on right click
+  elements.gridContainer.addEventListener("contextmenu", (e) => {
+    e.preventDefault();
+  });
+}
+
+function handleCellInteraction(x, y) {
+  // Create a unique cell identifier
+  const cellId = `${x},${y}`;
+  
+  // Check if we've already visited this cell during this drag
+  if (visitedCells.has(cellId)) {
+    return;
+  }
+  
+  // Add cell to visited set
+  visitedCells.add(cellId);
+  
+  // Get the cell's current state
+  const cellState = grid[y][x];
+  
+  // Only send message if cell is empty (value 0)
+  if (cellState === 0) {
+    wsManager.sendMessage({
+      type: "add_point",
+      x: parseInt(x),
+      y: parseInt(y),
+    });
+  }
+  
+  lastCell = { x, y };
 }
 
 function updateGrid(newGrid) {
@@ -483,21 +568,90 @@ const gameOverOverlay = document.getElementById("gameOverOverlay");
 
 // Function to handle game over state
 function handleGameOver(finalStats) {
-  if (isGameOver) return; // Prevent multiple triggers
+  if (isGameOver) return;
   isGameOver = true;
 
-  // Update stats with animations
-  const rounds = document.getElementById("finalRounds");
-  const points = document.getElementById("finalPoints");
-  const efficiency = document.getElementById("finalEfficiency");
+  const stats = finalStats.stats;
+  const rankInfo = finalStats.rank_info;
 
-  // Animate number counting
-  animateValue(rounds, 0, finalStats.total_rounds, 1000);
-  animateValue(points, 0, finalStats.points_placed, 1000);
-  animateValue(efficiency, 0, parseFloat(finalStats.efficiency_ratio), 1000, 2);
+  // Calculate time metrics
+  const minPossibleRounds = Math.ceil(stats.initial_red_count / 2);
+  const extraRoundsPercent = Math.round(((stats.total_rounds - minPossibleRounds) / minPossibleRounds) * 100);
 
-  // Show overlay with animation
-  gameOverOverlay.classList.add("visible");
+  // Update title and description
+  document.querySelector('.game-over-title').textContent = rankInfo.title;
+  document.querySelector('.game-over-message').textContent = rankInfo.description;
+
+  const statCards = [
+      {
+          label: "Final Score",
+          value: rankInfo.score,
+          suffix: "/1000",
+          subtext: "Overall performance rating"
+      },
+      {
+          label: "Resource Usage",
+          value: stats.efficiency_ratio,
+          suffix: "%",
+          subtext: `Used ${stats.points_placed} points to clear ${stats.initial_red_count} red`
+      },
+      {
+          label: "Time Efficiency",
+          value: stats.total_rounds,
+          subtext: `+${extraRoundsPercent}% over minimum (${minPossibleRounds} rounds)`
+      },
+      {
+          label: "Actions",
+          value: stats.points_placed,
+          suffix: "",
+          subtext: `${stats.clicks_per_round.toFixed(1)} points per round`
+      }
+  ];
+
+  // Get all stat card elements
+  const statsContainer = document.querySelector('.game-over-stats');
+  statsContainer.innerHTML = ''; // Clear existing stats
+
+  // Create and append stat cards
+  statCards.forEach(stat => {
+      const card = document.createElement('div');
+      card.className = 'stat-card';
+      
+      card.innerHTML = `
+          <div class="stat-label">${stat.label}</div>
+          <div class="stat-value">0${stat.suffix || ''}</div>
+          <div class="stat-subtext">${stat.subtext}</div>
+      `;
+      
+      statsContainer.appendChild(card);
+      
+      // Store final value and suffix for animation
+      const valueElement = card.querySelector('.stat-value');
+      valueElement.dataset.finalValue = stat.value;
+      valueElement.dataset.suffix = stat.suffix || '';
+  });
+
+  // Show the overlay
+  gameOverOverlay.classList.add('visible');
+
+  // Animate the stats
+  const statElements = document.querySelectorAll('.stat-card');
+  statElements.forEach(statCard => {
+      const valueElement = statCard.querySelector('.stat-value');
+      if (valueElement) {
+          const finalValue = parseFloat(valueElement.dataset.finalValue);
+          const suffix = valueElement.dataset.suffix;
+          
+          animateValue(
+              valueElement,
+              0,
+              finalValue,
+              1500,
+              finalValue % 1 === 0 ? 0 : 1,
+              suffix
+          );
+      }
+  });
 }
 
 // Function to handle play again button click
@@ -521,7 +675,7 @@ function handlePlayAgain() {
 }
 
 // Utility function to animate number counting
-function animateValue(element, start, end, duration, decimals = 0) {
+function animateValue(element, start, end, duration, decimals = 0, suffix = "") {
   const range = end - start;
   const minTimer = 50;
   let stepTime = Math.abs(Math.floor(duration / range));
@@ -531,16 +685,13 @@ function animateValue(element, start, end, duration, decimals = 0) {
   const step = range / (duration / stepTime);
 
   function updateValue() {
-    current += step;
-    if ((step > 0 && current >= end) || (step < 0 && current <= end)) {
-      current = end;
-      element.textContent = decimals ? end.toFixed(decimals) : Math.round(end);
-      return;
-    }
-    element.textContent = decimals
-      ? current.toFixed(decimals)
-      : Math.round(current);
-    requestAnimationFrame(updateValue);
+      current += step;
+      if ((step > 0 && current >= end) || (step < 0 && current <= end)) {
+          element.textContent = end.toFixed(decimals) + suffix;
+          return;
+      }
+      element.textContent = current.toFixed(decimals) + suffix;
+      requestAnimationFrame(updateValue);
   }
 
   requestAnimationFrame(updateValue);
