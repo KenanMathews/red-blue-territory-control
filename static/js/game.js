@@ -568,7 +568,6 @@ const gameOverOverlay = document.getElementById("gameOverOverlay");
 
 // Function to handle game over state
 function handleGameOver(finalStats) {
-  if (isGameOver) return;
   isGameOver = true;
 
   const stats = finalStats.stats;
